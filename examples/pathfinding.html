@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="../modules/PathFinding.js/lib/pathfinding-browser.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.min.js"></script>
+        <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+        <style>
+            .cell {
+                height: 25px;
+                width: 25px;
+                border: thin solid grey;
+                display: inline-block;
+            }
+            .walkable {
+                background-color: white;
+            }
+            .unwalkable {
+                background-color: black;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="grid"></div>
+        <button onclick="highlightPath()">Highlight Path</button>
+        <script>
+        
+            /* global _ */
+            /* global PF */
+            var matrix = [
+                [0, 1, 0, 0, 0],
+                [0, 1, 0, 1, 0],
+                [0, 0, 0, 1, 0],
+            ];
+            var expectedPath = [
+                [0,0],
+                [0,1],
+                [0,2],
+                [1,2],
+                [2,2],
+                [2,1],
+                [2,0],
+                [3,0],
+                [4,0],
+                [4,1],
+                [4,2],
+            ];
+            var grid = new PF.Grid(matrix);
+            var finder = new PF.BestFirstFinder({
+                heuristic: PF.Heuristic.chebyshev,
+                allowDiagonal: false,
+            });
+            var path = finder.findPath(0, 0, 4, 2, grid);
+            
+            console.log('matrix', matrix);
+            console.log('path', path);
+            console.log('expected path, equality', expectedPath, _.isEqual(path, expectedPath));
+            
+            function highlightPath() {
+                // console.log(path)
+                try {
+                    path.forEach(function(p, i){
+                        setTimeout(function(){
+                            $('#grid').children().eq(p[1]).children().eq(p[0]).css('background-color','yellow');
+                        }, i * 100);
+                    });
+                } catch (e) {
+                    console.error('Unable to highlight path', e)
+                }
+            }
+            
+            // Build grid
+            matrix.forEach(function(row, i){
+                var rowDiv = $('<div />');
+                row.forEach(function(cell){
+                    var cellDiv = $('<div class="cell '+(cell?'unwalkable':'walkable')+'" />');
+                    rowDiv.append(cellDiv);
+                });
+                $('#grid').append(rowDiv);
+            });
+            
+        </script>
+    </body>
+</html>
