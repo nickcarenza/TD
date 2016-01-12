@@ -1,3 +1,12 @@
 [submodule "modules/PathFinding.js"]
 	path = modules/PathFinding.js
 	url = https://github.com/qiao/PathFinding.js.git
+[submodule "modules/phaser"]
+	path = modules/phaser
+	url = https://github.com/photonstorm/phaser.git
+[submodule "demos/phaser-coding-tips"]
+	path = demos/phaser-coding-tips
+	url = https://github.com/photonstorm/phaser-coding-tips
+[submodule "demos/phaser-examples"]
+	path = demos/phaser-examples
+	url = https://github.com/photonstorm/phaser-examples

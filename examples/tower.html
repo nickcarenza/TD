@@ -1,11 +1,8 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <!--<script src="//cdnjs.cloudflare.com/ajax/libs/crafty/0.5.4/crafty-min.js"></script>-->
-        <!--<script src="//cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.min.js"></script>-->
-        <!--<script src="//code.jquery.com/jquery-2.1.4.min.js"></script>-->
+        <script src="../modules/PathFinding.js/lib/pathfinding-browser.min.js"></script>
         <script src="//cdnjs.cloudflare.com/ajax/libs/phaser/2.4.4/phaser.min.js"></script>
-        <!--<script src="//cdn.jsdelivr.net/phaser/2.2.2/phaser.min.js"></script>-->
         <style>
         </style>
     </head>
@@ -33,8 +30,35 @@
             var speed = 4;
             var bulletSpeed = 300;
             
-            console.log('move the lemming (dragon) with arrow keys and shoot with touch/click');
+            console.log('the lemming hsould follow a path from A to B');
             console.log('arrow should continuously point to the lemming (dragon) and shoot at it');
+            
+            
+            var matrix = [
+                [0, 1, 0, 0, 0, 1, 0, 0],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 0, 0, 1, 0, 0, 0, 1],
+            ];
+            
+            /* global PF */
+            var grid = new PF.Grid(matrix);
+            
+            var finder = new PF.BestFirstFinder({
+                heuristic: PF.Heuristic.chebyshev,
+                allowDiagonal: false,
+            });
+            
+            var pathOffsetX = 50;
+            var pathOffsetY = 50;
+            var path = finder.findPath(0, 0, 7, 0, grid);
+            var pathLeftToTravel = path.map(function(v) {
+                return v.map(function(o) {
+                    return o * 100;
+                });
+            });
             
             function create() {
             
@@ -57,7 +81,7 @@
             
                 sprite.body.allowRotation = false;
                 
-                dragon = game.add.sprite(100, 100, 'dragon');
+                dragon = game.add.sprite(pathOffsetX, pathOffsetY, 'dragon');
                 dragon.anchor.set(0.5);
             
                 game.physics.enable(dragon, Phaser.Physics.ARCADE);
@@ -72,27 +96,28 @@
                 {
                     fire();
                 }
+                
+                if (pathLeftToTravel[0][0] === dragon.x - pathOffsetX && pathLeftToTravel[0][1] === dragon.y - pathOffsetY) {
+                    console.log('dragon reached destination', pathLeftToTravel[0]);
+                    if (pathLeftToTravel.length > 1) {
+                        console.log('up next', pathLeftToTravel[1]);
+                        pathLeftToTravel = pathLeftToTravel.slice(1);
+                    } else {
+                        console.log('all done');
+                    }
+                }
             
-                if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT))
-                {
-                    dragon.x -= speed;
-                }
-                else if (game.input.keyboard.isDown(Phaser.Keyboard.RIGHT))
-                {
-                    dragon.x += speed;
-                }
-                else if (game.input.keyboard.isDown(Phaser.Keyboard.UP))
-                {
-                    dragon.y -= speed;
-                }
-                else if (game.input.keyboard.isDown(Phaser.Keyboard.DOWN))
-                {
-                    dragon.y += speed;
-                }
-                else
-                {
-                    dragon.rotation = 0;
-                }
+                     if (dragon.x - pathOffsetX < pathLeftToTravel[0][0])
+                    dragon.x += Math.min(speed, pathLeftToTravel[0][0] - dragon.x + pathOffsetX);
+                
+                else if (dragon.x - pathOffsetX > pathLeftToTravel[0][0])
+                    dragon.x -= Math.min(speed, dragon.x - pathLeftToTravel[0][0] - pathOffsetX);
+                    
+                else if (dragon.y - pathOffsetY < pathLeftToTravel[0][1])
+                    dragon.y += Math.min(speed, pathLeftToTravel[0][1] - dragon.y + pathOffsetY);
+                
+                else if (dragon.y - pathOffsetY > pathLeftToTravel[0][1])
+                    dragon.y -= Math.min(speed, dragon.y - pathLeftToTravel[0][1] - pathOffsetY);
             
             }
             
@@ -115,7 +140,8 @@
             
                 game.debug.text('Active Bullets: ' + bullets.countLiving() + ' / ' + bullets.total, 32, 32);
                 game.debug.spriteInfo(sprite, 32, 450);
-            
+                game.debug.spriteInfo(dragon, 432, 450);
+                game.debug.text('Next path: ' + pathLeftToTravel[0], 32, 64);
             }
 
         </script>
