@@ -14,8 +14,6 @@
                        + 'arrow should continuously point to the creep and shoot at it' + '\n'
                        + 'a collision should reduce creep health and kill it after 3 hits' + '\n'
                        + 'press enter to change fire modes between 1) first 2) last 3) random');
-            
-            console.warn('known issue', 'targeting first breaks once respawns start');
         
             /* global Phaser */
             var game = new Phaser.Game(800, 600, Phaser.CANVAS, 'phaser-example', { preload: preload, create: create, update: update, render: render });
