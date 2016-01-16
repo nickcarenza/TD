@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="../modules/PathFinding.js/lib/pathfinding-browser.min.js"></script>
+        <script src="//cdnjs.cloudflare.com/ajax/libs/phaser/2.4.4/phaser.min.js"></script>
+        <style>
+        </style>
+    </head>
+    <body>
+        <div id="game"></div>
+        <script>
+            
+            console.info('the creeps should follow a path from A to B' + '\n'
+                       + 'arrow should continuously point to the creep and shoot at it' + '\n'
+                       + 'a collision should reduce creep health and kill it after 4 hits' + '\n'
+                       + 'press enter to change fire modes between first, random, healthiest and weakest');
+        
+            /* global Phaser */
+            var game = new Phaser.Game(800, 600, Phaser.CANVAS, 'phaser-example', { preload: preload, create: create, update: update, render: render });
+            
+            function preload() {
+                game.load.image('tower', '../demos/phaser-examples/examples/assets/sprites/arrow.png');
+                game.load.image('bullet', '../demos/phaser-examples/examples/assets/sprites/purple_ball.png');
+                game.load.image('creep', '../demos/phaser-examples/examples/assets/sprites/lemming.png');
+            }
+            
+            var towers;
+            var bullets;
+            var creeps;
+            
+            var fireRate = 100;
+            var nextFire = 0;
+            
+            var spawnRate = 500;
+            var nextSpawn = 0;
+            
+            var creepSpeed = 4;
+            var bulletSpeed = 300;
+            
+            var targeting = {
+                FIRST: 1,
+                LAST: 2,
+                HEALTHIEST_PERCENT: 3,
+                HEALTHIEST_ABSOLUTE: 4,
+                WEAKEST_PERCENT: 5,
+                WEAKEST_ABSOLUTE: 6,
+                RANDOM: 7,
+                _EOF: 8,
+            };
+            
+            var selectedTarget = targeting.FIRST;
+            
+            var matrix = [
+                [0, 1, 0, 0, 0, 1, 0, 0],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 1, 0, 1, 0, 1, 0, 1],
+                [0, 0, 0, 1, 0, 0, 0, 1],
+            ];
+            
+            /* global PF */
+            var grid = new PF.Grid(matrix);
+            
+            var finder = new PF.BestFirstFinder({
+                heuristic: PF.Heuristic.chebyshev,
+                allowDiagonal: false,
+            });
+            
+            var creepPath = finder.findPath(0, 0, 7, 0, grid).map(function(p){
+                return {
+                  x: p[0] * 100,
+                  y: p[1] * 100,  
+                };
+            });
+            
+            var creepSpawnPoint = {
+                x: 50,
+                y: 50,
+            };
+            
+            function create() {
+            
+                game.physics.startSystem(Phaser.Physics.ARCADE);
+            
+                game.stage.backgroundColor = '#313131';
+            
+                bullets = game.add.group();
+                bullets.enableBody = true;
+                bullets.physicsBodyType = Phaser.Physics.ARCADE;
+                
+                creeps = game.add.group();
+                creeps.enableBody = true;
+                creeps.physicsBodyType = Phaser.Physics.ARCADE;
+                
+                creeps.createMultiple(4, 'creep');
+                creeps.setAll('checkWorldBounds', true);
+                creeps.setAll('outOfBoundsKill', true);
+                
+                towers = game.add.group();
+                
+                var targetKey = this.input.keyboard.addKey(Phaser.Keyboard.ENTER);
+                targetKey.onDown.add(nextTargeting);
+                
+                // Click on location then hit number 1 to spawn tower there
+                game.input.onDown.add(prepareTowerPlacement);
+                
+                var oneKey = this.input.keyboard.addKey(Phaser.Keyboard.ONE);
+                oneKey.onDown.add(placeTowerOne);
+            }
+            
+            var pendingTower = null;
+            
+            function prepareTowerPlacement(pointer) {
+                if(pendingTower) {
+                    pendingTower.destroy();
+                    pendingTower = null;
+                }
+                
+                var highlight = game.add.graphics(pointer.x, pointer.y);
+                highlight.beginFill(0xFF0000, 1);
+                highlight.drawCircle(0, 0, 100);
+                
+                pendingTower = highlight;
+            }
+            
+            function placeTowerOne() {
+                if (!pendingTower)
+                    return;
+                towers.create(pendingTower.x, pendingTower.y, 'tower');
+                towers.setAll('anchor.x', 0.5);
+                towers.setAll('anchor.y', 0.5);
+                pendingTower.destroy();
+                pendingTower = null;
+            
+                bullets.createMultiple(50, 'bullet');
+                bullets.setAll('checkWorldBounds', true);
+                bullets.setAll('outOfBoundsKill', true);
+            }
+            
+            function nextTargeting() {
+                if (selectedTarget+1 === targeting._EOF) {
+                    selectedTarget = 1;
+                } else {
+                    selectedTarget += 1;
+                }
+                console.log('targeting changed to:', targetToName(selectedTarget));
+            }
+            
+            function targetToName(target) {
+                for (var key in targeting)
+                    if (targeting[key] == target)
+                        return key;
+            }
+            
+            function update() {
+            
+                var target = targetCreep(selectedTarget);
+                
+                if (target)
+                    towers.forEach(function(tower) {
+                        tower.rotation = game.physics.arcade.angleToXY(tower, target.x, target.y);
+                    });
+            
+                if (game.time.now > nextFire && bullets.countDead() > 0)
+                    if (target)
+                        fire(target);
+                    
+                if (game.time.now > nextSpawn && creeps.countDead() > 0)
+                    spawnCreep();
+                
+                // As we don't need to exchange any velocities or motion we can the 'overlap' check instead of 'collide'
+                game.physics.arcade.overlap(creeps, bullets, overlapHandler, null, this);
+            
+                creeps.forEachAlive(function(creep){
+                    
+                    // calculate path here, or is that too much?
+
+                    if (creep.path[0].x === creep.x - creepSpawnPoint.x && creep.path[0].y === creep.y - creepSpawnPoint.y) {
+                        // console.log('creep reached destination', creep.path[0]);
+                        if (creep.path.length > 1) {
+                            // console.log('up next',creep.path[1]);
+                            creep.path = creep.path.slice(1);
+                        } else {
+                            // console.log('all done');
+                            creep.kill();
+                            return;
+                        }
+                    }
+                    
+                         if (creep.x - creepSpawnPoint.x < creep.path[0].x) {
+                        creep.x += Math.min(creepSpeed, creep.path[0].x - creep.x + creepSpawnPoint.x);
+                        creep.distanceRemaining = (creep.path.length - 1) * 100 + creep.path[0].x - creep.x;
+                    }
+                    
+                    else if (creep.x - creepSpawnPoint.x > creep.path[0].x) {
+                        creep.x -= Math.min(creepSpeed, creep.x - creep.path[0].x - creepSpawnPoint.x);
+                        creep.distanceRemaining = (creep.path.length - 1) * 100 + creep.x - creep.path[0].x;
+                    }
+                        
+                    else if (creep.y - creepSpawnPoint.y < creep.path[0].y) {
+                        creep.y += Math.min(creepSpeed, creep.path[0].y - creep.y + creepSpawnPoint.y);
+                        creep.distanceRemaining = (creep.path.length - 1) * 100 + creep.path[0].y - creep.y;
+                    }
+                    
+                    else if (creep.y - creepSpawnPoint.y > creep.path[0].y) {
+                        creep.y -= Math.min(creepSpeed, creep.y - creep.path[0].y - creepSpawnPoint.y);
+                        creep.distanceRemaining = (creep.path.length - 1) * 100 + creep.y - creep.path[0].y;
+                    }
+                    
+                });
+            }
+            
+            function overlapHandler(creep, bullet) {
+                //console.log('overlap bullet', bullet);
+                bullet.kill();
+                creep.damage(25);
+                creep.alpha = creep.health / creep.maxHealth;
+                //console.log('overlap creep', creep, creep.health);
+            }
+            
+            function spawnCreep() {
+                nextSpawn = game.time.now + spawnRate;
+                
+                var creep = creeps.getFirstDead();
+                
+                if (creep === null)
+                    return;
+                
+                creep.path = creepPath;
+                creep.maxHealth = 100;
+                creep.distanceRemaining = creep.path.length * 100;
+                
+                creep.reset(creepSpawnPoint.x, creepSpawnPoint.y);
+                
+                creep.health = 100;
+                creep.alpha = 1;
+            }
+            
+            function fire(target) {
+                nextFire = game.time.now + fireRate;
+        
+                towers.forEach(function(tower){
+                    var bullet = bullets.getFirstDead();
+                    
+                    if (bullet) {
+                        bullet.reset(tower.x, tower.y);
+                        game.physics.arcade.moveToXY(bullet, target.x, target.y, bulletSpeed);
+                    }
+                });
+            }
+            
+            function render() {
+                game.debug.text('Active Bullets: ' + bullets.countLiving() + ' / ' + bullets.total, 32, 32);
+                game.debug.text('Active Creeps: ' + creeps.countLiving() + ' / ' + creeps.total, 32, 32 * 2);
+                game.debug.text('Active Towers: ' + towers.countLiving() + ' / ' + towers.total, 32, 32 * 3);
+                game.debug.text('Targeting: ' + targetToName(selectedTarget), 32, 32 * 4);
+            }
+            
+            function targetCreep(attr) {
+                var creep;
+                switch(attr) {
+                    case targeting.FIRST:
+                        // FIXME should probably calculate distance remaining to target along path
+                        creeps.sort('distanceRemaining', Phaser.Group.SORT_ASCENDING);
+                        creep = creeps.getFirstAlive();
+                        break;
+                    case targeting.LAST:
+                        // FIXME should probably calculate distance remaining to target along path
+                        creeps.sort('distanceRemaining', Phaser.Group.SORT_DESCENDING);
+                        creep = creeps.getFirstAlive();
+                        break;
+                    case targeting.RANDOM:
+                        // TODO sticky targeting, stay on target til it dies (optional)
+                        creep = creeps.getRandom();
+                        break;
+                    case targeting.HEALTHIEST_PERCENT:
+                        creeps.customSort(sortHealthiestPercent);
+                        creep = creeps.getFirstAlive();
+                        break;
+                    case targeting.HEALTHIEST_ABSOLUTE:
+                        creeps.customSort(sortHealthiestAbsolute);
+                        creep = creeps.getFirstAlive();
+                        break;
+                    case targeting.WEAKEST_PERCENT:
+                        creeps.customSort(sortWeakestPercent);
+                        creep = creeps.getFirstAlive();
+                        break;
+                    case targeting.WEAKEST_ABSOLUTE:
+                        creeps.customSort(sortWeakestAbsolute);
+                        creep = creeps.getFirstAlive();
+                        break;
+                    case targeting.CLOSEST:
+                        // TODO closest to tower
+                        console.log('"Closest" targeting not yet implemented. Defaulting to "First"');
+                        creep = targetCreep(targeting.FIRST);
+                        break;
+                    case targeting.FURTHEST:
+                        // TODO furthest tower
+                        console.log('"Furthest" targeting not yet implemented. Defaulting to "First"');
+                        creep = targetCreep(targeting.FIRST);
+                        break;
+                    default: creep = targetCreep(targeting.FIRST);
+                }
+                return creep;
+            }
+            
+            function sortHealthiestPercent(a,b) {
+                var a_health_percent = a.health / a.maxHealth;
+                var b_health_percent = b.health / b.maxHealth;
+                switch (true) {
+                    case a_health_percent > b_health_percent:
+                        return -1;
+                    case a_health_percent < b_health_percent:
+                        return 1;
+                    default:
+                    case a_health_percent === b_health_percent:
+                        return 0;
+                }
+            }
+            
+            function sortHealthiestAbsolute(a,b) {
+                switch (true) {
+                    case a.health > b.health:
+                        return -1;
+                    case a.health < b.health:
+                        return 1;
+                    default:
+                    case a.health === b.health:
+                        return 0;
+                }
+            }
+            
+            function sortWeakestPercent(a,b) {
+                var a_health_percent = a.health / a.maxHealth;
+                var b_health_percent = b.health / b.maxHealth;
+                switch (true) {
+                    case a_health_percent > b_health_percent:
+                        return 1;
+                    case a_health_percent < b_health_percent:
+                        return -1;
+                    default:
+                    case a_health_percent === b_health_percent:
+                        return 0;
+                }
+            }
+            
+            function sortWeakestAbsolute(a,b) {
+                switch (true) {
+                    case a.health > b.health:
+                        return 1;
+                    case a.health < b.health:
+                        return -1;
+                    default:
+                    case a.health === b.health:
+                        return 0;
+                }
+            }
+
+        </script>
+    </body>
+</html>
